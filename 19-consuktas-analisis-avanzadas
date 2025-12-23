@@ -1,0 +1,294 @@
+-- =============================================
+-- CONSULTAS ANALÍTICAS AVANZADAS - FarmaciaMiBarrio
+-- Análisis de Negocio y Business Intelligence
+-- =============================================
+
+USE FarmaciaMiBarrio;
+GO
+
+PRINT '========================================';
+PRINT 'CONSULTAS ANALÍTICAS AVANZADAS';
+PRINT '========================================';
+PRINT '';
+
+-- ===========================================
+-- 1. ANÁLISIS DE VENTAS POR PERIODO
+-- ===========================================
+PRINT '1. VENTAS POR MES (Últimos 6 meses)';
+PRINT '----------------------------------------';
+
+SELECT 
+    YEAR(FechaVenta) AS Año,
+    MONTH(FechaVenta) AS Mes,
+    DATENAME(MONTH, FechaVenta) AS NombreMes,
+    COUNT(VentaID) AS NumeroVentas,
+    SUM(SubTotal) AS Subtotal,
+    SUM(IGV) AS IGV,
+    SUM(Total) AS TotalVentas,
+    AVG(Total) AS PromedioVenta,
+    MAX(Total) AS VentaMaxima,
+    MIN(Total) AS VentaMinima
+FROM Ventas
+WHERE Estado = 'COMPLETADA'
+  AND FechaVenta >= DATEADD(MONTH, -6, GETDATE())
+GROUP BY YEAR(FechaVenta), MONTH(FechaVenta), DATENAME(MONTH, FechaVenta)
+ORDER BY Año DESC, Mes DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 2. TOP 20 PRODUCTOS MÁS RENTABLES
+-- ===========================================
+PRINT '2. TOP 20 PRODUCTOS MÁS RENTABLES';
+PRINT '----------------------------------------';
+
+SELECT TOP 20
+    p.CodigoProducto,
+    p.Descripcion,
+    p.Laboratorio,
+    c.NombreCategoria,
+    p.PrecioCompra,
+    p.PrecioVenta,
+    p.MargenGanancia AS MargenPorcentaje,
+    SUM(dv.Cantidad) AS UnidadesVendidas,
+    SUM(dv.Subtotal) AS TotalVendido,
+    SUM((p.PrecioVenta - p.PrecioCompra) * dv.Cantidad) AS GananciaTotal
+FROM Productos p
+INNER JOIN Categorias c ON c.CategoriaID = p.CategoriaID
+LEFT JOIN DetalleVentas dv ON dv.ProductoID = p.ProductoID
+WHERE p.Activo = 1
+GROUP BY p.CodigoProducto, p.Descripcion, p.Laboratorio, c.NombreCategoria,
+         p.PrecioCompra, p.PrecioVenta, p.MargenGanancia
+HAVING SUM(dv.Cantidad) > 0
+ORDER BY GananciaTotal DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 3. ANÁLISIS DE DESEMPEÑO POR SUCURSAL
+-- ===========================================
+PRINT '3. DESEMPEÑO COMPARATIVO POR SUCURSAL';
+PRINT '----------------------------------------';
+
+SELECT 
+    s.CodigoSucursal,
+    s.NombreSucursal,
+    s.Gerente,
+    COUNT(DISTINCT e.EmpleadoID) AS NumeroEmpleados,
+    COUNT(DISTINCT v.VentaID) AS NumeroVentas,
+    SUM(v.Total) AS TotalVentas,
+    AVG(v.Total) AS PromedioVenta,
+    COUNT(DISTINCT v.ClienteID) AS ClientesUnicos,
+    (SELECT COUNT(*) FROM Inventario i WHERE i.SucursalID = s.SucursalID) AS ProductosEnStock,
+    (SELECT SUM(i.Existencia * p.PrecioVenta) 
+     FROM Inventario i 
+     INNER JOIN Productos p ON p.ProductoID = i.ProductoID 
+     WHERE i.SucursalID = s.SucursalID) AS ValorInventario
+FROM Sucursales s
+LEFT JOIN Empleados e ON e.SucursalID = s.SucursalID AND e.Activo = 1
+LEFT JOIN Ventas v ON v.SucursalID = s.SucursalID AND v.Estado = 'COMPLETADA'
+WHERE s.Activo = 1
+GROUP BY s.SucursalID, s.CodigoSucursal, s.NombreSucursal, s.Gerente
+ORDER BY TotalVentas DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 4. ANÁLISIS DE CATEGORÍAS MÁS VENDIDAS
+-- ===========================================
+PRINT '4. VENTAS POR CATEGORÍA DE PRODUCTO';
+PRINT '----------------------------------------';
+
+SELECT 
+    c.NombreCategoria,
+    COUNT(DISTINCT p.ProductoID) AS ProductosEnCategoria,
+    SUM(dv.Cantidad) AS UnidadesVendidas,
+    SUM(dv.Subtotal) AS TotalVentas,
+    AVG(p.MargenGanancia) AS MargenPromedioCategoria,
+    SUM((p.PrecioVenta - p.PrecioCompra) * dv.Cantidad) AS GananciaTotal
+FROM Categorias c
+INNER JOIN Productos p ON p.CategoriaID = c.CategoriaID
+LEFT JOIN DetalleVentas dv ON dv.ProductoID = p.ProductoID
+WHERE c.Activo = 1
+GROUP BY c.CategoriaID, c.NombreCategoria
+ORDER BY TotalVentas DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 5. RANKING DE EMPLEADOS POR VENTAS
+-- ===========================================
+PRINT '5. TOP 10 EMPLEADOS CON MÁS VENTAS';
+PRINT '----------------------------------------';
+
+SELECT TOP 10
+    e.DNI,
+    e.Nombres + ' ' + e.Apellidos AS NombreCompleto,
+    e.Cargo,
+    s.NombreSucursal,
+    COUNT(v.VentaID) AS NumeroVentas,
+    SUM(v.Total) AS TotalVendido,
+    AVG(v.Total) AS PromedioVenta,
+    MIN(v.FechaVenta) AS PrimeraVenta,
+    MAX(v.FechaVenta) AS UltimaVenta
+FROM Empleados e
+INNER JOIN Sucursales s ON s.SucursalID = e.SucursalID
+LEFT JOIN Ventas v ON v.EmpleadoID = e.EmpleadoID AND v.Estado = 'COMPLETADA'
+WHERE e.Activo = 1
+  AND e.Cargo IN ('VENDEDOR', 'FARMACEUTICO', 'CAJERO')
+GROUP BY e.EmpleadoID, e.DNI, e.Nombres, e.Apellidos, e.Cargo, s.NombreSucursal
+HAVING COUNT(v.VentaID) > 0
+ORDER BY TotalVendido DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 6. ANÁLISIS DE MÉTODOS DE PAGO
+-- ===========================================
+PRINT '6. DISTRIBUCIÓN POR MÉTODO DE PAGO';
+PRINT '----------------------------------------';
+
+SELECT 
+    MetodoPago,
+    COUNT(VentaID) AS NumeroTransacciones,
+    SUM(Total) AS MontoTotal,
+    AVG(Total) AS PromedioTransaccion,
+    CAST(COUNT(VentaID) * 100.0 / (SELECT COUNT(*) FROM Ventas WHERE Estado = 'COMPLETADA') AS DECIMAL(5,2)) AS PorcentajeUso
+FROM Ventas
+WHERE Estado = 'COMPLETADA'
+GROUP BY MetodoPago
+ORDER BY MontoTotal DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 7. PRODUCTOS CON ROTACIÓN LENTA
+-- ===========================================
+PRINT '7. PRODUCTOS CON ROTACIÓN LENTA (Stock alto, pocas ventas)';
+PRINT '----------------------------------------';
+
+SELECT TOP 20
+    p.CodigoProducto,
+    p.Descripcion,
+    c.NombreCategoria,
+    SUM(i.Existencia) AS StockTotal,
+    p.StockMinimo,
+    ISNULL(SUM(dv.Cantidad), 0) AS UnidadesVendidas,
+    SUM(i.Existencia * p.PrecioVenta) AS ValorInventario,
+    DATEDIFF(DAY, p.FechaRegistro, GETDATE()) AS DiasEnSistema
+FROM Productos p
+INNER JOIN Categorias c ON c.CategoriaID = p.CategoriaID
+INNER JOIN Inventario i ON i.ProductoID = p.ProductoID
+LEFT JOIN DetalleVentas dv ON dv.ProductoID = p.ProductoID
+WHERE p.Activo = 1
+GROUP BY p.ProductoID, p.CodigoProducto, p.Descripcion, c.NombreCategoria, 
+         p.PrecioVenta, p.FechaRegistro, p.StockMinimo
+HAVING SUM(i.Existencia) > p.StockMinimo * 2 
+   AND ISNULL(SUM(dv.Cantidad), 0) < 100
+ORDER BY ValorInventario DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 8. CLIENTES MÁS FRECUENTES (TOP 20)
+-- ===========================================
+PRINT '8. TOP 20 CLIENTES MÁS FRECUENTES';
+PRINT '----------------------------------------';
+
+SELECT TOP 20
+    c.NumeroDocumento,
+    CASE 
+        WHEN c.RazonSocial IS NOT NULL THEN c.RazonSocial
+        ELSE c.Nombres + ' ' + c.Apellidos
+    END AS NombreCliente,
+    c.TipoCliente,
+    COUNT(v.VentaID) AS NumeroCompras,
+    SUM(v.Total) AS TotalGastado,
+    AVG(v.Total) AS PromedioCompra,
+    MIN(v.FechaVenta) AS PrimeraCompra,
+    MAX(v.FechaVenta) AS UltimaCompra,
+    DATEDIFF(DAY, MIN(v.FechaVenta), MAX(v.FechaVenta)) AS DiasComoCliente
+FROM Clientes c
+INNER JOIN Ventas v ON v.ClienteID = c.ClienteID
+WHERE c.Activo = 1 AND v.Estado = 'COMPLETADA'
+GROUP BY c.ClienteID, c.NumeroDocumento, c.RazonSocial, c.Nombres, c.Apellidos, c.TipoCliente
+HAVING COUNT(v.VentaID) > 1
+ORDER BY TotalGastado DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 9. ANÁLISIS DE PROVEEDORES
+-- ===========================================
+PRINT '9. ANÁLISIS DE PROVEEDORES Y COMPRAS';
+PRINT '----------------------------------------';
+
+SELECT 
+    pr.RUC,
+    pr.RazonSocial,
+    pr.PaisOrigen,
+    COUNT(DISTINCT p.ProductoID) AS ProductosSuministrados,
+    COUNT(c.CompraID) AS NumeroCompras,
+    SUM(c.Total) AS TotalComprado,
+    AVG(c.Total) AS PromedioCompra,
+    MAX(c.FechaCompra) AS UltimaCompra,
+    DATEDIFF(DAY, MAX(c.FechaCompra), GETDATE()) AS DiasUltimaCompra
+FROM Proveedores pr
+LEFT JOIN Productos p ON p.ProveedorID = pr.ProveedorID AND p.Activo = 1
+LEFT JOIN Compras c ON c.ProveedorID = pr.ProveedorID AND c.Estado = 'RECIBIDA'
+WHERE pr.Activo = 1
+GROUP BY pr.ProveedorID, pr.RUC, pr.RazonSocial, pr.PaisOrigen
+ORDER BY TotalComprado DESC;
+
+PRINT '';
+
+-- ===========================================
+-- 10. DASHBOARD EJECUTIVO - RESUMEN GENERAL
+-- ===========================================
+PRINT '10. DASHBOARD EJECUTIVO - INDICADORES CLAVE (KPIs)';
+PRINT '========================================================';
+
+-- KPIs Generales
+DECLARE @TotalVentas DECIMAL(18,2);
+DECLARE @VentasHoy DECIMAL(18,2);
+DECLARE @VentasMes DECIMAL(18,2);
+DECLARE @NumeroVentas INT;
+DECLARE @PromedioVenta DECIMAL(18,2);
+DECLARE @ClientesActivos INT;
+DECLARE @ProductosActivos INT;
+DECLARE @ValorInventarioTotal DECIMAL(18,2);
+DECLARE @ProductosBajoStock INT;
+
+SELECT @TotalVentas = SUM(Total) FROM Ventas WHERE Estado = 'COMPLETADA';
+SELECT @VentasHoy = ISNULL(SUM(Total), 0) FROM Ventas WHERE CAST(FechaVenta AS DATE) = CAST(GETDATE() AS DATE) AND Estado = 'COMPLETADA';
+SELECT @VentasMes = ISNULL(SUM(Total), 0) FROM Ventas WHERE YEAR(FechaVenta) = YEAR(GETDATE()) AND MONTH(FechaVenta) = MONTH(GETDATE()) AND Estado = 'COMPLETADA';
+SELECT @NumeroVentas = COUNT(*) FROM Ventas WHERE Estado = 'COMPLETADA';
+SELECT @PromedioVenta = AVG(Total) FROM Ventas WHERE Estado = 'COMPLETADA';
+SELECT @ClientesActivos = COUNT(*) FROM Clientes WHERE Activo = 1;
+SELECT @ProductosActivos = COUNT(*) FROM Productos WHERE Activo = 1;
+SELECT @ValorInventarioTotal = SUM(i.Existencia * p.PrecioVenta) FROM Inventario i INNER JOIN Productos p ON p.ProductoID = i.ProductoID;
+SELECT @ProductosBajoStock = COUNT(DISTINCT i.ProductoID) 
+FROM Inventario i 
+INNER JOIN Productos p ON p.ProductoID = i.ProductoID 
+WHERE i.Existencia <= p.StockMinimo;
+
+PRINT '';
+PRINT '=== INDICADORES FINANCIEROS ===';
+PRINT 'Total Ventas (Históricas): ' + FORMAT(@TotalVentas, 'C', 'es-PE');
+PRINT 'Ventas Hoy: ' + FORMAT(@VentasHoy, 'C', 'es-PE');
+PRINT 'Ventas del Mes: ' + FORMAT(@VentasMes, 'C', 'es-PE');
+PRINT 'Número Total de Ventas: ' + CAST(@NumeroVentas AS VARCHAR);
+PRINT 'Ticket Promedio: ' + FORMAT(@PromedioVenta, 'C', 'es-PE');
+PRINT '';
+PRINT '=== INDICADORES OPERATIVOS ===';
+PRINT 'Clientes Activos: ' + CAST(@ClientesActivos AS VARCHAR);
+PRINT 'Productos Activos: ' + CAST(@ProductosActivos AS VARCHAR);
+PRINT 'Valor Total del Inventario: ' + FORMAT(@ValorInventarioTotal, 'C', 'es-PE');
+PRINT 'Productos con Stock Bajo: ' + CAST(@ProductosBajoStock AS VARCHAR) + ' (Requieren reposición)';
+PRINT '';
+
+PRINT '========================================';
+PRINT 'CONSULTAS ANALÍTICAS COMPLETADAS';
+PRINT '========================================';
+PRINT '';
+GO
