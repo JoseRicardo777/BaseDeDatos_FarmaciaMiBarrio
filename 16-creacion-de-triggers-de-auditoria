@@ -1,0 +1,146 @@
+-- =============================================
+-- TRIGGERS AUTOMÁTICOS - FarmaciaMiBarrio
+-- Sistema de Auditoría Automática
+-- =============================================
+
+USE FarmaciaMiBarrio;
+GO
+
+PRINT '========================================';
+PRINT 'CREANDO TRIGGERS DE AUDITORÍA AUTOMÁTICA';
+PRINT '========================================';
+PRINT '';
+
+-- Agregado GO antes de cada CREATE TRIGGER para evitar error de primera instrucción
+
+-- TRIGGER: Auditar cambios en Productos
+PRINT 'Creando trigger de auditoría para Productos...';
+GO
+
+CREATE OR ALTER TRIGGER trg_Auditoria_Productos
+ON Productos
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @Accion VARCHAR(20);
+    DECLARE @ProductoID INT;
+    DECLARE @Detalles NVARCHAR(500);
+    
+    IF EXISTS (SELECT * FROM inserted) AND NOT EXISTS (SELECT * FROM deleted)
+    BEGIN
+        SET @Accion = 'INSERT';
+        SELECT @ProductoID = ProductoID, 
+               @Detalles = 'Nuevo producto: ' + CodigoProducto + ' - ' + Descripcion
+        FROM inserted;
+    END
+    ELSE IF EXISTS (SELECT * FROM inserted) AND EXISTS (SELECT * FROM deleted)
+    BEGIN
+        SET @Accion = 'UPDATE';
+        SELECT @ProductoID = i.ProductoID,
+               @Detalles = 'Actualizado: ' + i.CodigoProducto + 
+                          ' | Precio Anterior: ' + CAST(d.PrecioVenta AS VARCHAR) +
+                          ' | Precio Nuevo: ' + CAST(i.PrecioVenta AS VARCHAR)
+        FROM inserted i
+        INNER JOIN deleted d ON i.ProductoID = d.ProductoID;
+    END
+    ELSE
+    BEGIN
+        SET @Accion = 'DELETE';
+        SELECT @ProductoID = ProductoID,
+               @Detalles = 'Eliminado: ' + CodigoProducto + ' - ' + Descripcion
+        FROM deleted;
+    END
+    
+    INSERT INTO AuditoriaAccesos (EmpleadoID, Usuario, Accion, Tabla, RegistroID, Detalles, Resultado)
+    VALUES (1, 'SISTEMA', @Accion + ' Producto', 'Productos', @ProductoID, @Detalles, 'EXITOSO');
+END;
+GO
+
+PRINT 'Trigger de auditoría para Productos creado';
+
+-- TRIGGER: Actualizar inventario automáticamente después de venta
+PRINT 'Creando trigger de actualización de inventario en ventas...';
+GO
+
+CREATE OR ALTER TRIGGER trg_Actualizar_Inventario_Venta
+ON DetalleVentas
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    UPDATE Inventario
+    SET Existencia = Existencia - i.Cantidad,
+        FechaUltimaActualizacion = GETDATE()
+    FROM Inventario inv
+    INNER JOIN inserted i ON inv.ProductoID = i.ProductoID
+    INNER JOIN Ventas v ON v.VentaID = i.VentaID
+    WHERE inv.SucursalID = v.SucursalID;
+    
+    INSERT INTO AuditoriaAccesos (EmpleadoID, Usuario, Accion, Tabla, RegistroID, Detalles, Resultado)
+    SELECT 1, 'SISTEMA', 'ACTUALIZAR Inventario', 'Inventario', i.ProductoID, 
+           'Venta procesada - Cantidad: ' + CAST(i.Cantidad AS VARCHAR), 'EXITOSO'
+    FROM inserted i;
+END;
+GO
+
+PRINT 'Trigger de actualización de inventario en ventas creado';
+
+-- TRIGGER: Actualizar inventario automáticamente después de compra
+PRINT 'Creando trigger de actualización de inventario en compras...';
+GO
+
+CREATE OR ALTER TRIGGER trg_Actualizar_Inventario_Compra
+ON DetalleCompras
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    UPDATE Inventario
+    SET Existencia = Existencia + i.Cantidad,
+        FechaUltimaActualizacion = GETDATE()
+    FROM Inventario inv
+    INNER JOIN inserted i ON inv.ProductoID = i.ProductoID
+    INNER JOIN Compras c ON c.CompraID = i.CompraID
+    WHERE inv.SucursalID = c.SucursalID;
+    
+    INSERT INTO AuditoriaAccesos (EmpleadoID, Usuario, Accion, Tabla, RegistroID, Detalles, Resultado)
+    SELECT 1, 'SISTEMA', 'ACTUALIZAR Inventario', 'Inventario', i.ProductoID, 
+           'Compra recibida - Cantidad: ' + CAST(i.Cantidad AS VARCHAR), 'EXITOSO'
+    FROM inserted i;
+END;
+GO
+
+PRINT 'Trigger de actualización de inventario en compras creado';
+
+-- TRIGGER: Alertas de stock mínimo
+PRINT 'Creando trigger de alertas de stock mínimo...';
+GO
+
+CREATE OR ALTER TRIGGER trg_Alerta_Stock_Minimo
+ON Inventario
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    INSERT INTO AuditoriaAccesos (EmpleadoID, Usuario, Accion, Tabla, RegistroID, Detalles, Resultado)
+    SELECT 1, 'SISTEMA', 'ALERTA Stock Mínimo', 'Inventario', i.InventarioID,
+           'ProductoID: ' + CAST(i.ProductoID AS VARCHAR) + 
+           ' | Sucursal: ' + CAST(i.SucursalID AS VARCHAR) +
+           ' | Stock Actual: ' + CAST(i.Existencia AS VARCHAR), 'ALERTA'
+    FROM inserted i
+    INNER JOIN Productos p ON p.ProductoID = i.ProductoID
+    WHERE i.Existencia <= p.StockMinimo;
+END;
+GO
+
+PRINT 'Trigger de alertas de stock mínimo creado';
+
+PRINT '';
+PRINT 'Todos los triggers de auditoría creados exitosamente';
+PRINT '';
+GO
