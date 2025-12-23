@@ -1,0 +1,80 @@
+-- =============================================
+-- VERIFICACIÓN PARTE 3 - Inventario (OPTIMIZADO)
+-- FarmaciaMiBarrio
+-- =============================================
+
+USE FarmaciaMiBarrio;
+GO
+
+PRINT '';
+PRINT '========================================';
+PRINT '  VERIFICACIÓN PARTE 3 - INVENTARIO';
+PRINT '========================================';
+PRINT '';
+
+-- Corregido de "Codigo" a "CodigoProducto" y optimizado para rapidez
+PRINT 'ESTADO DEL INVENTARIO:';
+PRINT '-------------------------';
+
+SELECT 
+    COUNT(DISTINCT i.ProductoID) AS ProductosEnInventario,
+    SUM(i.Existencia) AS UnidadesTotales
+FROM Inventario i;
+
+SELECT 
+    SUM(CAST(i.Existencia AS BIGINT) * CAST(p.PrecioVenta AS DECIMAL(18,2))) AS ValorTotalInventario
+FROM Inventario i
+INNER JOIN Productos p ON i.ProductoID = p.ProductoID;
+
+PRINT '';
+PRINT 'TOP 10 PRODUCTOS MAS VENDIDOS:';
+PRINT '-------------------------------';
+
+SELECT TOP 10
+    p.CodigoProducto, -- Corregido de "Codigo" a "CodigoProducto"
+    p.Descripcion,
+    SUM(dv.Cantidad) AS UnidadesVendidas,
+    SUM(dv.Subtotal) AS MontoTotal
+FROM DetalleVentas dv
+INNER JOIN Productos p ON dv.ProductoID = p.ProductoID
+INNER JOIN Ventas v ON dv.VentaID = v.VentaID
+WHERE v.Estado = 'COMPLETADA'
+GROUP BY p.ProductoID, p.CodigoProducto, p.Descripcion
+ORDER BY UnidadesVendidas DESC;
+
+PRINT '';
+PRINT 'PRODUCTOS CON STOCK CRITICO (TOP 20):';
+PRINT '---------------------------------------';
+
+SELECT TOP 20
+    p.CodigoProducto, -- Corregido de "Codigo" a "CodigoProducto"
+    p.Descripcion,
+    s.NombreSucursal,
+    i.Existencia,
+    p.StockMinimo
+FROM Inventario i
+INNER JOIN Productos p ON i.ProductoID = p.ProductoID
+INNER JOIN Sucursales s ON i.SucursalID = s.SucursalID
+WHERE i.Existencia <= p.StockMinimo
+ORDER BY i.Existencia ASC;
+
+PRINT '';
+PRINT 'CATEGORIAS MAS VENDIDAS:';
+PRINT '--------------------------';
+
+SELECT TOP 10
+    c.NombreCategoria,
+    COUNT(DISTINCT p.ProductoID) AS ProductosEnCategoria,
+    SUM(dv.Cantidad) AS UnidadesVendidas
+FROM DetalleVentas dv
+INNER JOIN Productos p ON dv.ProductoID = p.ProductoID
+INNER JOIN Categorias c ON p.CategoriaID = c.CategoriaID
+INNER JOIN Ventas v ON dv.VentaID = v.VentaID
+WHERE v.Estado = 'COMPLETADA'
+GROUP BY c.CategoriaID, c.NombreCategoria
+ORDER BY UnidadesVendidas DESC;
+
+PRINT '';
+PRINT 'Verificacion Parte 3 completada';
+PRINT '========================================';
+GO
