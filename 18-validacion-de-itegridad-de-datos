@@ -1,0 +1,205 @@
+-- =============================================
+-- VALIDACIÓN COMPLETA DE INTEGRIDAD DE DATOS
+-- Verifica que TODOS los datos estén insertados correctamente
+-- =============================================
+
+USE FarmaciaMiBarrio;
+GO
+
+PRINT '========================================';
+PRINT 'VALIDACIÓN COMPLETA DE INTEGRIDAD DE DATOS';
+PRINT '========================================';
+PRINT '';
+
+-- Variables para contadores
+DECLARE @ProductosEsperados INT = 10000;
+DECLARE @InventarioEsperado INT = 40000; -- 10,000 productos x 4 sucursales
+DECLARE @ClientesEsperados INT = 2000;
+DECLARE @EmpleadosEsperados INT = 41;
+DECLARE @VentasEsperadas INT = 5000;
+DECLARE @ComprasEsperadas INT = 1000;
+
+DECLARE @ProductosReales INT;
+DECLARE @InventarioReal INT;
+DECLARE @ClientesReales INT;
+DECLARE @EmpleadosReales INT;
+DECLARE @VentasReales INT;
+DECLARE @ComprasReales INT;
+
+-- Obtener conteos reales
+SELECT @ProductosReales = COUNT(*) FROM Productos WHERE Activo = 1;
+SELECT @InventarioReal = COUNT(*) FROM Inventario;
+SELECT @ClientesReales = COUNT(*) FROM Clientes WHERE Activo = 1;
+SELECT @EmpleadosReales = COUNT(*) FROM Empleados WHERE Activo = 1;
+SELECT @VentasReales = COUNT(*) FROM Ventas WHERE Estado = 'COMPLETADA';
+SELECT @ComprasReales = COUNT(*) FROM Compras WHERE Estado = 'RECIBIDA';
+
+PRINT '==========================================';
+PRINT '  VERIFICACIÓN DE REGISTROS INSERTADOS';
+PRINT '==========================================';
+PRINT '';
+
+-- Validar Productos
+IF @ProductosReales = @ProductosEsperados
+    PRINT '✓ PRODUCTOS: ' + CAST(@ProductosReales AS VARCHAR) + ' / ' + CAST(@ProductosEsperados AS VARCHAR) + ' - CORRECTO';
+ELSE
+    PRINT '✗ PRODUCTOS: ' + CAST(@ProductosReales AS VARCHAR) + ' / ' + CAST(@ProductosEsperados AS VARCHAR) + ' - FALTAN ' + CAST(@ProductosEsperados - @ProductosReales AS VARCHAR);
+
+-- Validar Inventario
+IF @InventarioReal = @InventarioEsperado
+    PRINT '✓ INVENTARIO: ' + CAST(@InventarioReal AS VARCHAR) + ' / ' + CAST(@InventarioEsperado AS VARCHAR) + ' - CORRECTO';
+ELSE
+    PRINT '✗ INVENTARIO: ' + CAST(@InventarioReal AS VARCHAR) + ' / ' + CAST(@InventarioEsperado AS VARCHAR) + ' - FALTAN ' + CAST(@InventarioEsperado - @InventarioReal AS VARCHAR);
+
+-- Validar Clientes
+IF @ClientesReales = @ClientesEsperados
+    PRINT '✓ CLIENTES: ' + CAST(@ClientesReales AS VARCHAR) + ' / ' + CAST(@ClientesEsperados AS VARCHAR) + ' - CORRECTO';
+ELSE
+    PRINT '✗ CLIENTES: ' + CAST(@ClientesReales AS VARCHAR) + ' / ' + CAST(@ClientesEsperados AS VARCHAR) + ' - FALTAN ' + CAST(@ClientesEsperados - @ClientesReales AS VARCHAR);
+
+-- Validar Empleados
+IF @EmpleadosReales = @EmpleadosEsperados
+    PRINT '✓ EMPLEADOS: ' + CAST(@EmpleadosReales AS VARCHAR) + ' / ' + CAST(@EmpleadosEsperados AS VARCHAR) + ' - CORRECTO';
+ELSE
+    PRINT '✗ EMPLEADOS: ' + CAST(@EmpleadosReales AS VARCHAR) + ' / ' + CAST(@EmpleadosEsperados AS VARCHAR) + ' - FALTAN ' + CAST(@EmpleadosEsperados - @EmpleadosReales AS VARCHAR);
+
+-- Validar Ventas
+IF @VentasReales >= @VentasEsperadas
+    PRINT '✓ VENTAS: ' + CAST(@VentasReales AS VARCHAR) + ' / ' + CAST(@VentasEsperadas AS VARCHAR) + ' - CORRECTO';
+ELSE
+    PRINT '✗ VENTAS: ' + CAST(@VentasReales AS VARCHAR) + ' / ' + CAST(@VentasEsperadas AS VARCHAR) + ' - FALTAN ' + CAST(@VentasEsperadas - @VentasReales AS VARCHAR);
+
+-- Validar Compras
+IF @ComprasReales >= @ComprasEsperadas
+    PRINT '✓ COMPRAS: ' + CAST(@ComprasReales AS VARCHAR) + ' / ' + CAST(@ComprasEsperadas AS VARCHAR) + ' - CORRECTO';
+ELSE
+    PRINT '✗ COMPRAS: ' + CAST(@ComprasReales AS VARCHAR) + ' / ' + CAST(@ComprasEsperadas AS VARCHAR) + ' - FALTAN ' + CAST(@ComprasEsperadas - @ComprasReales AS VARCHAR);
+
+PRINT '';
+PRINT '==========================================';
+PRINT '  VALIDACIÓN DE RELACIONES E INTEGRIDAD';
+PRINT '==========================================';
+PRINT '';
+
+-- Verificar que todos los productos tienen inventario en las 4 sucursales
+DECLARE @ProductosSinInventario INT;
+SELECT @ProductosSinInventario = COUNT(DISTINCT p.ProductoID)
+FROM Productos p
+WHERE p.Activo = 1
+  AND (SELECT COUNT(DISTINCT i.SucursalID) FROM Inventario i WHERE i.ProductoID = p.ProductoID) < 4;
+
+IF @ProductosSinInventario = 0
+    PRINT '✓ Todos los productos tienen inventario en las 4 sucursales';
+ELSE
+    PRINT '✗ HAY ' + CAST(@ProductosSinInventario AS VARCHAR) + ' productos sin inventario completo';
+
+-- Verificar que todas las ventas tienen detalles
+DECLARE @VentasSinDetalle INT;
+SELECT @VentasSinDetalle = COUNT(*)
+FROM Ventas v
+WHERE NOT EXISTS (SELECT 1 FROM DetalleVentas dv WHERE dv.VentaID = v.VentaID);
+
+IF @VentasSinDetalle = 0
+    PRINT '✓ Todas las ventas tienen detalles correctos';
+ELSE
+    PRINT '✗ HAY ' + CAST(@VentasSinDetalle AS VARCHAR) + ' ventas sin detalles';
+
+-- Verificar que todas las compras tienen detalles
+DECLARE @ComprasSinDetalle INT;
+SELECT @ComprasSinDetalle = COUNT(*)
+FROM Compras c
+WHERE NOT EXISTS (SELECT 1 FROM DetalleCompras dc WHERE dc.CompraID = c.CompraID);
+
+IF @ComprasSinDetalle = 0
+    PRINT '✓ Todas las compras tienen detalles correctos';
+ELSE
+    PRINT '✗ HAY ' + CAST(@ComprasSinDetalle AS VARCHAR) + ' compras sin detalles';
+
+-- Verificar que todos los empleados tienen sucursal asignada
+DECLARE @EmpleadosSinSucursal INT;
+SELECT @EmpleadosSinSucursal = COUNT(*)
+FROM Empleados e
+WHERE e.SucursalID IS NULL OR e.SucursalID NOT IN (SELECT SucursalID FROM Sucursales);
+
+IF @EmpleadosSinSucursal = 0
+    PRINT '✓ Todos los empleados tienen sucursal asignada';
+ELSE
+    PRINT '✗ HAY ' + CAST(@EmpleadosSinSucursal AS VARCHAR) + ' empleados sin sucursal';
+
+PRINT '';
+PRINT '==========================================';
+PRINT '  MUESTRA DE DATOS PARA VERIFICACIÓN';
+PRINT '==========================================';
+PRINT '';
+
+-- Mostrar primeros 5 productos
+PRINT '-- PRIMEROS 5 PRODUCTOS --';
+SELECT TOP 5 
+    CodigoProducto,
+    Descripcion,
+    PrecioVenta,
+    Laboratorio
+FROM Productos
+ORDER BY ProductoID;
+
+PRINT '';
+PRINT '-- INVENTARIO POR SUCURSAL (Totales) --';
+SELECT 
+    s.NombreSucursal,
+    COUNT(DISTINCT i.ProductoID) AS ProductosDiferentes,
+    SUM(i.Existencia) AS TotalUnidades,
+    SUM(i.Existencia * p.PrecioVenta) AS ValorInventario
+FROM Inventario i
+INNER JOIN Sucursales s ON s.SucursalID = i.SucursalID
+INNER JOIN Productos p ON p.ProductoID = i.ProductoID
+GROUP BY s.NombreSucursal
+ORDER BY s.NombreSucursal;
+
+PRINT '';
+PRINT '-- VENTAS POR SUCURSAL --';
+SELECT 
+    s.NombreSucursal,
+    COUNT(v.VentaID) AS NumeroVentas,
+    SUM(v.Total) AS TotalVentas
+FROM Ventas v
+INNER JOIN Sucursales s ON s.SucursalID = v.SucursalID
+WHERE v.Estado = 'COMPLETADA'
+GROUP BY s.NombreSucursal
+ORDER BY s.NombreSucursal;
+
+PRINT '';
+PRINT '==========================================';
+PRINT '  RESUMEN FINAL';
+PRINT '==========================================';
+PRINT '';
+
+DECLARE @TotalRegistros INT;
+SET @TotalRegistros = @ProductosReales + @InventarioReal + @ClientesReales + 
+                      @EmpleadosReales + @VentasReales + @ComprasReales;
+
+PRINT 'TOTAL DE REGISTROS EN BASE DE DATOS: ' + CAST(@TotalRegistros AS VARCHAR);
+PRINT '';
+
+IF @ProductosReales = @ProductosEsperados 
+   AND @InventarioReal = @InventarioEsperado
+   AND @ClientesReales = @ClientesEsperados
+   AND @EmpleadosReales = @EmpleadosEsperados
+   AND @VentasReales >= @VentasEsperadas
+   AND @ComprasReales >= @ComprasEsperadas
+   AND @ProductosSinInventario = 0
+   AND @VentasSinDetalle = 0
+   AND @ComprasSinDetalle = 0
+BEGIN
+    PRINT '================================================';
+    PRINT '  ✓✓✓ BASE DE DATOS 100% COMPLETA Y CORRECTA ✓✓✓';
+    PRINT '================================================';
+END
+ELSE
+BEGIN
+    PRINT '================================================';
+    PRINT '  ✗ HAY PROBLEMAS DE INTEGRIDAD - REVISAR ARRIBA';
+    PRINT '================================================';
+END
+
+PRINT '';
+GO
