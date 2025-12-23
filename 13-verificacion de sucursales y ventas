@@ -1,0 +1,87 @@
+-- =============================================
+-- VERIFICACIÓN PARTE 2 - Sucursales y Ventas (OPTIMIZADO)
+-- FarmaciaMiBarrio
+-- =============================================
+
+USE FarmaciaMiBarrio;
+GO
+
+PRINT '';
+PRINT '========================================';
+PRINT '  VERIFICACIÓN PARTE 2 - SUCURSALES Y VENTAS';
+PRINT '========================================';
+PRINT '';
+
+-- Simplificado para evitar llenar tempdb - consultas separadas
+PRINT 'DATOS POR SUCURSAL:';
+PRINT '----------------------';
+
+SELECT 
+    s.SucursalID,
+    s.NombreSucursal,
+    s.CodigoSucursal,
+    s.Direccion,
+    s.Gerente
+FROM Sucursales s
+ORDER BY s.SucursalID;
+
+PRINT '';
+PRINT 'INVENTARIO POR SUCURSAL:';
+PRINT '-------------------------';
+
+SELECT 
+    s.NombreSucursal,
+    COUNT(i.InventarioID) AS ProductosConStock,
+    SUM(i.Existencia) AS StockTotal
+FROM Sucursales s
+LEFT JOIN Inventario i ON s.SucursalID = i.SucursalID
+GROUP BY s.SucursalID, s.NombreSucursal
+ORDER BY s.SucursalID;
+
+PRINT '';
+PRINT 'VENTAS POR SUCURSAL:';
+PRINT '----------------------';
+
+SELECT 
+    s.NombreSucursal,
+    COUNT(v.VentaID) AS TotalVentas,
+    ISNULL(SUM(v.Total), 0) AS MontoTotal
+FROM Sucursales s
+LEFT JOIN Ventas v ON s.SucursalID = v.SucursalID AND v.Estado = 'COMPLETADA'
+GROUP BY s.SucursalID, s.NombreSucursal
+ORDER BY s.SucursalID;
+
+PRINT '';
+PRINT 'EMPLEADOS POR SUCURSAL:';
+PRINT '-------------------------';
+
+SELECT 
+    s.NombreSucursal,
+    COUNT(e.EmpleadoID) AS TotalEmpleados
+FROM Sucursales s
+LEFT JOIN Empleados e ON s.SucursalID = e.SucursalID AND e.Activo = 1
+GROUP BY s.SucursalID, s.NombreSucursal
+ORDER BY s.SucursalID;
+
+PRINT '';
+PRINT 'RESUMEN FINANCIERO:';
+PRINT '----------------------';
+
+SELECT 
+    'Total Ventas Completadas' AS Concepto,
+    COUNT(*) AS Cantidad,
+    SUM(Total) AS Monto
+FROM Ventas 
+WHERE Estado = 'COMPLETADA';
+
+SELECT 
+    'Total Compras Recibidas' AS Concepto,
+    COUNT(*) AS Cantidad,
+    SUM(Total) AS Monto
+FROM Compras
+WHERE Estado = 'RECIBIDA';
+
+PRINT '';
+PRINT 'Verificacion Parte 2 completada';
+PRINT '========================================';
+GO
