@@ -1,0 +1,64 @@
+-- =============================================
+-- VERIFICACIÓN PARTE 1 - Conteo de Registros
+-- FarmaciaMiBarrio
+-- =============================================
+
+USE FarmaciaMiBarrio;
+GO
+
+PRINT '';
+PRINT '========================================';
+PRINT '  VERIFICACIÓN PARTE 1 - CONTEO REGISTROS';
+PRINT '========================================';
+PRINT '';
+
+-- Resumen de tablas
+PRINT 'RESUMEN DE DATOS:';
+PRINT '-------------------';
+
+SELECT 'Sucursales' AS Tabla, COUNT(*) AS TotalRegistros FROM Sucursales
+UNION ALL
+SELECT 'Categorias', COUNT(*) FROM Categorias
+UNION ALL
+SELECT 'Proveedores', COUNT(*) FROM Proveedores
+UNION ALL
+SELECT 'Productos', COUNT(*) FROM Productos
+UNION ALL
+SELECT 'Inventario', COUNT(*) FROM Inventario
+UNION ALL
+SELECT 'Clientes', COUNT(*) FROM Clientes
+UNION ALL
+SELECT 'Empleados', COUNT(*) FROM Empleados
+UNION ALL
+SELECT 'Ventas', COUNT(*) FROM Ventas
+UNION ALL
+SELECT 'DetalleVentas', COUNT(*) FROM DetalleVentas
+UNION ALL
+SELECT 'Compras', COUNT(*) FROM Compras
+UNION ALL
+SELECT 'DetalleCompras', COUNT(*) FROM DetalleCompras
+ORDER BY Tabla;
+
+PRINT '';
+PRINT 'EMPLEADOS POR NIVEL DE ACCESO:';
+PRINT '---------------------------------';
+
+SELECT 
+    CASE NivelAcceso
+        WHEN 1 THEN 'SUPER_ADMIN'
+        WHEN 2 THEN 'GERENTE'
+        WHEN 3 THEN 'SUPERVISOR'
+        WHEN 4 THEN 'VENDEDOR'
+        WHEN 5 THEN 'ALMACENERO'
+    END AS Cargo,
+    NivelAcceso,
+    COUNT(*) AS Cantidad
+FROM Empleados
+WHERE Activo = 1
+GROUP BY NivelAcceso
+ORDER BY NivelAcceso;
+
+PRINT '';
+PRINT 'Verificacion Parte 1 completada';
+PRINT '========================================';
+GO
